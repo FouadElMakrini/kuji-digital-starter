@@ -1,0 +1,124 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum KujiStatus {
+  draft
+  active
+  closed
+}
+
+enum TicketStatus {
+  available
+  opened
+}
+
+enum SessionStatus {
+  active
+  completed
+  revoked
+  expired
+}
+
+model AdminUser {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Kuji {
+  id            String      @id @default(cuid())
+  name          String
+  description   String?
+  status        KujiStatus  @default(draft)
+  gridColumns   Int         @default(6)
+  coverImageUrl String?
+  sourceUrl     String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  prizeTiers    PrizeTier[]
+  tickets       Ticket[]
+  sessions      ClientSession[]
+  drawLogs      DrawLog[]
+}
+
+model PrizeTier {
+  id           String   @id @default(cuid())
+  kujiId       String
+  letter       String
+  label        String
+  quantity     Int
+  imageUrl     String?
+  displayOrder Int
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  kuji Kuji @relation(fields: [kujiId], references: [id], onDelete: Cascade)
+
+  @@index([kujiId])
+}
+
+model Ticket {
+  id                String       @id @default(cuid())
+  kujiId            String
+  serialNumber      Int
+  gridPosition      Int
+  letter            String
+  status            TicketStatus @default(available)
+  openedAt          DateTime?
+  openedBySessionId String?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  kuji            Kuji           @relation(fields: [kujiId], references: [id], onDelete: Cascade)
+  openedBySession ClientSession? @relation(fields: [openedBySessionId], references: [id], onDelete: SetNull)
+  drawLogs        DrawLog[]
+
+  @@unique([kujiId, serialNumber])
+  @@unique([kujiId, gridPosition])
+  @@index([kujiId, status])
+}
+
+model ClientSession {
+  id           String        @id @default(cuid())
+  kujiId       String
+  accessCode   String        @unique
+  allowedDraws Int
+  usedDraws    Int           @default(0)
+  status       SessionStatus @default(active)
+  expiresAt    DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  kuji     Kuji     @relation(fields: [kujiId], references: [id], onDelete: Cascade)
+  tickets  Ticket[]
+  drawLogs DrawLog[]
+
+  @@index([kujiId])
+}
+
+model DrawLog {
+  id                 String   @id @default(cuid())
+  kujiId             String
+  sessionId          String
+  ticketId           String
+  ticketSerialNumber Int
+  gridPosition       Int
+  letter             String
+  openedAt           DateTime @default(now())
+
+  kuji    Kuji          @relation(fields: [kujiId], references: [id], onDelete: Cascade)
+  session ClientSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  ticket  Ticket        @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([kujiId, openedAt])
+  @@index([sessionId, openedAt])
+}
